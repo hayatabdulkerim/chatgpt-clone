@@ -1,17 +1,14 @@
-import 'dotenv/config'
+import 'dotenv/config'  //we need to import this here so that we can use environment variables in the backend
 import express from "express";
 import db from "./db/db.config.js";
-
+import mainRouter from './src/api/main.routes.js';
+import { errorHandler } from './src/middleware/error-handler.js';
 const app = express();
 
-app.post("api/chat/conversations", (req, res) => {
-  res.send("post method");
-});
+app.use(express.json()) // middleware for parsing request body (since we put this middleware befor the routes all requests comming to routes starting with /api will pass through this middleware before reaching the routes )
+app.use('/api' , mainRouter)  // a middleware for routes that start with /api
 
-app.get("api/chat/conversations", (req, res) => {
-  res.send("get method");
-});
-
+app.use(errorHandler)  // this is an error handler middleware we put it at the end so that errors can get to it
 
 async function startServer() {
   try {
@@ -26,7 +23,7 @@ async function startServer() {
       console.log("Server is running on port http://localhost:3888");
     });
   } catch (error) {
-    console.error("Error starting server:", error.message);
+    console.error("Error starting server:", error);
   }
 }
 
