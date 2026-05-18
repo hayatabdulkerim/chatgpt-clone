@@ -5,7 +5,7 @@ import mainRouter from './src/api/main.routes.js';
 import { errorHandler } from './src/middleware/error-handler.js';
 const app = express();
 
-app.use(express.json()) // middleware for parsing request body (since we put this middleware befor the routes all requests comming to routes starting with /api will pass through this middleware before reaching the routes )
+app.use(express.json()) // middleware for parsing request body (since we put this middleware before the routes all requests comming to routes starting with /api will pass through this middleware before reaching the routes )
 app.use('/api' , mainRouter)  // a middleware for routes that start with /api
 
 app.use(errorHandler)  // this is an error handler middleware we put it at the end so that errors can get to it
