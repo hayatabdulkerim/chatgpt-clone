@@ -7,7 +7,7 @@ const geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }); //
 
 //______________________________________________________________________________________________________________________
 
-// get chat history
+// get conversations / get chat history
 
 export const getRecentConversationRows = async (limit = 5) => {  // has a default value of 5
   const normalizedLimit = Number.parseInt(limit, 10); // converts the input into a base 10 or a decimal
@@ -42,6 +42,7 @@ const generateAssistantAnswer = async (historyRows, question) => {
       maxOutputTokens: 1024, //Limits response size.
     },
     history: formattedHistory,
+    // systemInstrunstion: 'only answer in amharic'
   });
 
   const result = await chat.sendMessage({ message: question });  
