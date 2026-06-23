@@ -1,78 +1,73 @@
-import db from "../../../../db/db.config";
-import { GoogleGenAI } from "@google/genai"; //This package is Google's SDK for interacting with Gemini AI models.
-
+import db from "../../../../db/db.config.js";
+import { GoogleGenAI } from "@google/genai";
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash-lite";
-const geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }); //This line creates an instance (object) of the GoogleGenAI class and stores it in geminiClient.
+const geminiClient = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+});
 
-//______________________________________________________________________________________________________________________
+// _____________________________________________________________
 
-// get conversations / get chat history
+// get conversations / history
+export const getRecentConversationRows = async (limit = 5) => {
+  const normalizedLimit = Number.parseInt(limit, 10);
 
-export const getRecentConversationRows = async (limit = 5) => {  // has a default value of 5
-  const normalizedLimit = Number.parseInt(limit, 10); // converts the input into a base 10 or a decimal
   const safeLimit =
     Number.isNaN(normalizedLimit) || normalizedLimit <= 0
       ? 20
       : normalizedLimit;
-  const [rows] = await db.execute(   // an array of the last few chats
+
+  const { rows } = await db.query(
     `SELECT id, role, content, created_at
-    FROM conversations
-    ORDER BY id DESC  
-    LIMIT ${safeLimit}`,
+     FROM conversations
+     ORDER BY id DESC
+     LIMIT ${safeLimit}`,
   );
+
   return rows.reverse();
 };
 
-//______________________________________________________________________________________________________________________
+// _____________________________________________________________
 
-// get ai answer
-
+// Gemini AI response
 const generateAssistantAnswer = async (historyRows, question) => {
-  // Format history for Gemini startChat (it expects it this way)
   const formattedHistory = historyRows.map((row) => ({
     role: row.role === "assistant" ? "model" : "user",
     parts: [{ text: row.content }],
   }));
 
-  //Creates a Gemini chat session.
-  const chat = geminiClient.chats.create({   // after this chat contains a Gemini chat object.
+  const chat = geminiClient.chats.create({
     model: GEMINI_MODEL,
     config: {
-      maxOutputTokens: 1024, //Limits response size.
+      maxOutputTokens: 1024,
     },
     history: formattedHistory,
-    // systemInstrunstion: 'only answer in amharic'
   });
 
-  const result = await chat.sendMessage({ message: question });  
-  
-  // result contains data like the response and the total token count
-  // result = {
-  //   text: "SQL is a database query language",
-  //   usageMetadata: {
-  //     totalTokenCount: 55,
-  //   },
-  // };
+  const result = await chat.sendMessage({
+    message: question,
+  });
 
   return {
-    text: result.text,    // the answer to the question
-    totalTokens: result.usageMetadata.totalTokenCount,  // total count
+    text: result.text,
+    totalTokens: result.usageMetadata.totalTokenCount,
   };
 };
 
-//______________________________________________________________________________________________________________________
+// _____________________________________________________________
 
-
-
-// get the last user question or ai answer (for a frontend )
-
+// get message by id
 const getMessageById = async (messageId) => {
-  const [rows] = await db.execute(
-    "SELECT id, role, content, token_count, created_at FROM conversations WHERE id = ? LIMIT 1",
+  const { rows } = await db.query(
+    `SELECT id, role, content, token_count, created_at
+     FROM conversations
+     WHERE id = $1
+     LIMIT 1`,
     [messageId],
   );
+
   if (!rows[0]) return null;
+
   return {
     id: rows[0].id,
     role: rows[0].role,
@@ -82,45 +77,50 @@ const getMessageById = async (messageId) => {
   };
 };
 
+// _____________________________________________________________
 
-//______________________________________________________________________________________________________________________
-
-// called in the controller which means this function runs first
-
+// main service
 export async function createConversationService(question) {
   try {
-    // validation
     if (!question.trim()) {
       const error = new Error("Question is required");
       error.status = 400;
       throw error;
     }
 
-    // get recent conversations
+    // history
     const historyRows = await getRecentConversationRows(5);
 
-    // insert new conversation (add the user question to the database)
-    const [result] = await db.execute(
-      'INSERT INTO conversations (content, role) VALUES (?, "user")',
+    // insert user message
+    const userResult = await db.query(
+      `INSERT INTO conversations (content, role)
+       VALUES ($1, 'user')
+       RETURNING id`,
       [question],
     );
 
-    // get the answer and total token count from the ai
+    const userId = userResult.rows[0].id;
+
+    // AI response
     const { text, totalTokens } = await generateAssistantAnswer(
       historyRows,
       question,
     );
 
-    // insert new conversation (add the ai response to the database)
-    const [createAssistantMessageResult] = await db.execute(
-      "INSERT INTO conversations (role, content, token_count) VALUES (?, ?, ?)",
+    // insert assistant message
+    const assistantResult = await db.query(
+      `INSERT INTO conversations (role, content, token_count)
+       VALUES ($1, $2, $3)
+       RETURNING id`,
       ["assistant", text, totalTokens],
     );
 
-    const userConversation = await getMessageById(result.insertId); // get the last user question
-    const assistantConversation = await getMessageById(  // get the last ai answer
-      createAssistantMessageResult.insertId, 
-    );
+    const assistantId = assistantResult.rows[0].id;
+
+    // fetch full records
+    const userConversation = await getMessageById(userId);
+
+    const assistantConversation = await getMessageById(assistantId);
 
     return {
       userConversation,

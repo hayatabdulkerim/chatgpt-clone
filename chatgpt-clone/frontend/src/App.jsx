@@ -43,13 +43,13 @@ function App() {
   //____________________________________________________________________________
 
   const handleSendMessage = async (question) => {
-    // Optimistically add user message
+    // Optimistically add user message(for the user to be able to see their question be added in the list of messages)
     const tempUserMessage = {
       id: Date.now(),
       role: "user",
       content: question,
     };
-    setConversations((prev) => [...prev, tempUserMessage]);
+    setConversations((prev) => [...(prev || []), tempUserMessage]);
     setIsLoading(true);
 
     try {
